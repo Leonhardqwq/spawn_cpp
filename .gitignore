@@ -1,0 +1,7 @@
+
+*.exe
+
+data
+.vscode
+cpp test
+waiting
