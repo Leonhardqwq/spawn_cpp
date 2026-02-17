@@ -2,6 +2,7 @@
 *.exe
 
 data
+.DS_Store
 .vscode
 cpp test
 waiting
