@@ -381,7 +381,7 @@ public:
         std::ofstream file(filename);
         std::sort(resu.begin(), resu.end());
         auto iter = resu.end()-1;
-        int upp = std::min(uint64_t(20),resu.size());
+        int upp = std::min(uint64_t(20),uint64_t(resu.size()));
         // 显示种子上限
         for(int i=0;i<upp;i++){
             file<<iter->metric;

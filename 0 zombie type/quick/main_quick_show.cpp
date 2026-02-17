@@ -1,5 +1,5 @@
-#include "../../inc/quick_seed_finder.h"
-#include <corecrt.h>
+#include "../../inc/seed_finder.h"
+// #include <corecrt.h>
 #include <cstdint>
 #include <cstdio>
 #include <iostream>
