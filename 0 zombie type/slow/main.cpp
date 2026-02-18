@@ -1,5 +1,5 @@
 # include "../../inc/seed_finder.h"
-#include <corecrt.h>
+// #include <corecrt.h>
 #include <cstdint>
 #include <cstdio>
 #include <iostream>
@@ -9,8 +9,8 @@ void check_continue(std::string s){
     std::cout<<s;
     int tmp;std::cin>>tmp;
 }
-Scene my_scene = POOL;
-uint64_t find_len = 0xffffffff;
+Scene my_scene = ROOF;
+uint64_t find_len = 0xfffff;
 
 
 void test_kmp(){
@@ -33,9 +33,12 @@ void test_kmp(){
 }
 void test_score(){
 	final_results.clear();
-    MultiScoreSeedFinder finder(0,uint64_t(find_len),50,my_scene,
-    {AHY_32,AXC_15, AQQ_16,AGL_7,AWW_8,ABC_12},
-       {3,3,        1,1,1,1});
+    MultiScoreSeedFinder finder(0,uint64_t(find_len),25,my_scene,
+    {
+        AHY_32,AQQ_16, ABC_12
+    }, {
+        1, 1, 1
+    });
     finder.multi_thread_find_score();
     finder.show_results(final_results, 1, 13, my_scene, 1000, 50);
     finder.output_csv("output.csv", final_results);
@@ -58,11 +61,11 @@ void show(){
 
 int main(){
     
-    test_kmp();
+    //test_kmp();
     //test_continue();
-    //test_score();  
+    test_score();  
     //show();
-    check_continue("\nEND");
+    // check_continue("\nEND");
 
     return 0;
 }

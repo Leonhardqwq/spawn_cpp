@@ -1,3 +1,4 @@
+#pragma once
 #include "seed_finder.h"
 #include <corecrt.h>
 #include <cstdint>
@@ -6,7 +7,6 @@
 
 const size_t array_size = 0x100000000; // 2^32
 uint32_t* array = new uint32_t[array_size];
-const uint64_t inv = 2083697005;
 
 
 class QuickScoreSeedFinder : public BasicSeedFinder {

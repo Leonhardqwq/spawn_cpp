@@ -1,3 +1,4 @@
+#pragma once
 #include <cstdio>
 #include <iostream>
 
@@ -13,6 +14,7 @@
 #include <fstream>
 
 const uint32_t SEED_STEP = 0x65;
+const uint64_t inv = 2083697005;
 
 
 // 19 普僵  20 雪人  21  22  23 无内容
@@ -58,8 +60,8 @@ enum Scene {
     ROOF
 };
 const std::string ZombieName[21] = {
-    "路障",   "撑杆",  "铁桶",  "读报",  "铁门", 
-    "橄榄",   "舞王",  "潜水",  "冰车",  "海豚", 
+    "路障", "撑杆", "铁桶", "读报", "铁门", 
+    "橄榄", "舞王", "潜水", "冰车", "海豚", 
     "小丑", "气球", "矿工", "跳跳", "蹦极", 
     "扶梯", "投篮", "白眼", "红眼",
     "普僵", "雪人"

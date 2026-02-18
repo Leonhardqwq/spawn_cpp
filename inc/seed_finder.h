@@ -1,5 +1,5 @@
+#pragma once
 #include "basic_setting.h"
-#include <cstdint>
 #include <thread>
 #include <mutex>
 
