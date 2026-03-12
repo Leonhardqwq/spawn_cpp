@@ -5,7 +5,7 @@
 #include <cstdio>
 #include <iostream>
 
-const size_t array_size = 0x100000000; // 2^32
+const uint64_t array_size = 0x100000000; // 2^32
 uint32_t* array = new uint32_t[array_size];
 
 
@@ -534,7 +534,7 @@ class QuickSetFinder : public BasicSeedFinder {
 protected:
     const uint64_t MAX_COUNT = 10;
     const int LOWEST_STORE = 1;
-    const uint32_t DENSITY = 13000;
+    const uint32_t DENSITY = 12000;
 
     ZombieTypeList _zlt;
     // 26=density
