@@ -27,7 +27,7 @@ void test_continue(){
     {
     },
     {
-        {AHY_32,ABC_12}
+        {AFT_21,}
     });
     finder.multi_thread_find_continue();
     // finder.show_results(final_results, 1, 13, my_scene, 1000, 25);
@@ -109,7 +109,7 @@ void data_test(){
 bool check_del(uint32_t rng_seed){
     BasicSeedFinder bsf;
     ZombieTypeList ztl(my_scene);
-    /*   normal
+/*   normal
     int cnt = 0;
     for(int i=0;i<8;i++){
         auto has = ztl.get_list_level(uint32_t(rng_seed-(8-i)*SEED_STEP), i);
@@ -123,9 +123,9 @@ bool check_del(uint32_t rng_seed){
     }
     return false;
     return cnt>0;
-    //  */
-    
-    ///*   ME半花
+//  */
+
+/*   ME半花
     int cnt_tl = 0;
     for(int i=0;i<8;i++){
         auto has = ztl.get_list_level(uint32_t(rng_seed-(8-i)*SEED_STEP), i);
@@ -148,8 +148,35 @@ bool check_del(uint32_t rng_seed){
         }
     }
     return cnt_tl>0 || cnt_ft<1 || cnt_qq>0;
-    //  */
+//  */
 
+/*   ME半花 井六炮
+    int cnt_ft = 0;
+    for(int i=0;i<8;i++){
+        auto has = ztl.get_list_level(uint32_t(rng_seed-(8-i)*SEED_STEP), i);
+        if(bsf.check_has(has,AFT_21)){
+            cnt_ft++;
+        }
+    }
+    int cnt_qq = 0;
+    for(int i=0;i<10;i++){
+        auto has = ztl.get_list_level(uint32_t(rng_seed-(8-i)*SEED_STEP), i);
+        if(bsf.check_has(has,AQQ_16)){
+            cnt_qq++;
+        }
+    }
+    return cnt_ft<1 || cnt_qq>0;
+//  */
+// /*  PE最长开局无梯子
+    int cnt_ft = 0;
+    for(int i=0;i<8;i++){
+        auto has = ztl.get_list_level(uint32_t(rng_seed-(8-i)*SEED_STEP), i);
+        if(bsf.check_has(has,AFT_21)){
+            cnt_ft++;
+        }
+    }
+    return cnt_ft>0;
+//  */
 };
 
 void output_csv(std::string filename,std::vector<uint32_t>& data){
@@ -162,7 +189,7 @@ void output_csv(std::string filename,std::vector<uint32_t>& data){
 // 删除前8次选卡不合条件的种子
 void del_seeds(){
     // load_data();
-    auto data = get_data_len(16);
+    auto data = get_data_len(30);
 
     data.erase(std::remove_if(data.begin(), data.end(), check_del), data.end());
 

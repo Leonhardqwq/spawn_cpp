@@ -23,7 +23,8 @@ void test_kmp(){
 	final_results.clear();
 
     MultiQuickKMPFinder finder(0,uint64_t(find_len),my_scene,{
-        509979,	502035,	58413
+        100667,	319801,	393519
+
         // 灯笼 55665  509979	502035	58413
         //炽热3190F6E4 无神 15258,	355416,	205630,
         //灯笼 群曾 467983	,336955	,221455
@@ -32,7 +33,6 @@ void test_kmp(){
             两仪400f
             2222-2322:  2224:   70899   435013  13227   
             2322-2422:  2324:   350403	492059	361767  2A5CDED2
-
             老手
             两仪100f
                 2224 66447	291399	203343
@@ -42,6 +42,7 @@ void test_kmp(){
             杂交 255017	,116789	,109881,        1255635695, 4AD6FFC9 624f-670f
             55665  280859	378117	475449 ; 7A5D771  2022-2188f        
             斜梯 353321,	491803,	501783; 39B83561 2022-2100; 红36/69(21-28) 桶40/69(57-66) 丑30/69(2)
+            群曾900f 130AE17C 100667,	319801,	393519
         */
         /*  浮华 
             凛冬: 
@@ -49,6 +50,8 @@ void test_kmp(){
             2823FC50 2060-2090 | 503849,401786,268591,;
             F5B057E5 2090-2150 | 100469	,292156	,475189
         */
+        // 两仪守梯100f 470309	222121	299481
+
     });
 
     finder.multi_thread_find_kmp();
@@ -58,7 +61,7 @@ void test_kmp(){
         return;
     }
     printf("FOUND\n");
-    finder.show_results(final_results, 1, 13, my_scene, 1112, 5);
+    finder.show_results(final_results, 1, 13, my_scene, 1000, 5);
     finder.output_csv("output.csv", final_results);
 }
 // 按分数寻种+种子难度分析
@@ -324,9 +327,9 @@ void show(uint32_t seed,uint32_t level_num,bool use_rng){
 
 
 int main(){
-    test_set();
+    // test_set();
     // level_analysis();
-    // test_kmp();
+    test_kmp();
     // test_continue();
     // test_score(); 
 
