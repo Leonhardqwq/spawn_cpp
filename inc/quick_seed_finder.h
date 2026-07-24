@@ -6,7 +6,11 @@
 #include <iostream>
 
 const uint64_t array_size = 0x100000000; // 2^32
+#ifdef PVZ_QUICK_EXTERNAL_ARRAY
+uint32_t* array = nullptr;
+#else
 uint32_t* array = new uint32_t[array_size];
+#endif
 
 
 class QuickScoreSeedFinder : public BasicSeedFinder {
@@ -24,12 +28,14 @@ protected:
     uint64_t num_cur;
 
     uint64_t num_level;
+    bool progress;
 
 public:
     std::vector<SeedInfo> results;
 
     QuickScoreSeedFinder(uint32_t start_seed,uint64_t start_offset,uint64_t num,uint64_t num_l,
-        Scene sc,std::vector<uint32_t> true_constraints,std::vector<int> true_weight){
+        Scene sc,std::vector<uint32_t> true_constraints,std::vector<int> true_weight,
+        bool show_progress = true){
         scene = sc;
         constraints = true_constraints;
         for(int i=0;i<constraints.size();i++)
@@ -38,6 +44,7 @@ public:
         num_total = num;
         num_cur = 0;
         num_level = num_l;
+        progress = show_progress;
         results.clear();
         _zlt.~ZombieTypeList(); 
         new(&_zlt) ZombieTypeList(scene); 
@@ -109,24 +116,16 @@ public:
 
     }
     void find(){
+        if(num_total==0 || num_level==0) return;
         std::queue<int> q_score;
         int sum_score = 0;
         uint32_t idx=uint32_t(cur_seed*inv);
-        for(int i=0;i<num_level;i++){
+        for(uint64_t i=0;i<num_level;i++){
             int tmp_score = get_score(array[idx++]);
             q_score.push(tmp_score);
             sum_score+=tmp_score;
-            cur_seed+=SEED_STEP;
         }
         while(num_cur<num_total){
-            int tmp_score = get_score(array[idx++]);
-            int minus_score = q_score.front();
-            q_score.push(tmp_score);q_score.pop();
-            sum_score+= tmp_score-minus_score;
-
-            cur_seed+=SEED_STEP;
-            num_cur++;
-
             bool found=false;
             if(sum_score>LOWEST_STORE){
                 for (auto &info : results) 
@@ -134,16 +133,24 @@ public:
                     found = true;
                     ++info.seed_count;
                     if (int(info.seed_count) <= MAX_COUNT)
-                        info.seeds.push_back(uint32_t(cur_seed-SEED_STEP*num_level));
+                        info.seeds.push_back(cur_seed);
                     break;
                 }
                 if (!found) 
-                    results.push_back(SeedInfo(sum_score, {uint32_t(cur_seed-SEED_STEP*num_level)}, 1));
+                    results.push_back(SeedInfo(sum_score, {cur_seed}, 1));
             }
-            if((num_cur)%(num_total/100)==0){
-                printf("%.1lf%% %d %lld %u\n",(100.0*num_cur/num_total),sum_score,num_cur,uint32_t(cur_seed-SEED_STEP*num_level));
+            ++num_cur;
+            if(progress && num_total>=100 && (num_cur)%(num_total/100)==0){
+                printf("%.1lf%% %d %lld %u\n",(100.0*num_cur/num_total),sum_score,num_cur,cur_seed);
                 fflush(stdout);
             }
+            if(num_cur==num_total) break;
+
+            int tmp_score = get_score(array[idx++]);
+            int minus_score = q_score.front();
+            q_score.push(tmp_score);q_score.pop();
+            sum_score+=tmp_score-minus_score;
+            cur_seed+=SEED_STEP;
         }
     }
     void show_tmp(){
@@ -157,22 +164,23 @@ class MultiQuickScoreSeedFinder: public BasicSeedFinder{
 private:
     std::vector<std::thread> pool;
 
-    const uint32_t interval = 5;
     uint32_t start_seed;
     uint64_t num_total;
     uint64_t num_level;
     Scene scene;
     std::vector<uint32_t> constraints;
     std::vector<int> weights;
+    bool progress;
 
 public:
     MultiQuickScoreSeedFinder(uint32_t start_s,uint64_t num_t,uint64_t num_l,Scene sc,
-        std::vector<uint32_t> true_cons,std::vector<int> true_w)
+        std::vector<uint32_t> true_cons,std::vector<int> true_w,
+        bool show_progress = true)
     :   start_seed(start_s),num_total(num_t),num_level(num_l),scene(sc),
-        constraints(true_cons),weights(true_w) {pool.clear();}
+        constraints(true_cons),weights(true_w),progress(show_progress) {pool.clear();}
     void single_thread_find_score(uint64_t st,uint64_t num_assign){
         QuickScoreSeedFinder ssf(this->start_seed,st,num_assign,this->num_level,this->scene,
-            this->constraints,this->weights);
+            this->constraints,this->weights,this->progress);
         ssf.find();
         mtx.lock();
         for (auto now_info : ssf.results) {
@@ -194,13 +202,17 @@ public:
         mtx.unlock();
     }
     void multi_thread_find_score(){
-        uint64_t block = 1 + num_total/MAX_THREAD, num_assign = block + num_level + interval;
-        for (int i=0;i<MAX_THREAD;i++){
-            uint64_t st = uint64_t(i*block);
+        if(num_total==0) return;
+        pool.clear();
+        uint64_t workers=std::min<uint64_t>(std::max(1u,MAX_THREAD),num_total);
+        uint64_t block=num_total/workers, remain=num_total%workers, st=0;
+        for(uint64_t i=0;i<workers;i++){
+            uint64_t num_assign=block+(i<remain);
             std::thread t([this,st,num_assign]{
                 single_thread_find_score(st,num_assign);
             });
             pool.push_back(std::move(t));
+            st+=num_assign;
         }
         for (auto &t: pool) t.join();
     }
@@ -219,12 +231,14 @@ protected:
     uint32_t cur_seed;
     uint64_t num_total;
     uint64_t num_cur;
+    bool progress;
 public:
     std::vector<SeedInfo> results;
 
     QuickContinueSeedFinder(uint32_t start_seed,uint64_t start_offset,uint64_t num,
         Scene sc,std::vector<std::vector<uint32_t>> true_constraints
         ,std::vector<std::vector<uint32_t>> false_constraints
+        ,bool show_progress = true
         ){
         scene = sc;
 
@@ -238,6 +252,7 @@ public:
         cur_seed = uint32_t(start_seed+start_offset*SEED_STEP);
         num_total = num;
         num_cur = 0;
+        progress = show_progress;
         results.clear();
         _zlt.~ZombieTypeList(); 
         new(&_zlt) ZombieTypeList(scene); 
@@ -332,7 +347,7 @@ public:
                     results.push_back(SeedInfo(len, {uint32_t(cur_seed-SEED_STEP*len)}, 1));
             }
 
-            if((num_cur)%(num_total/100)==0){
+            if(progress && num_total>=100 && (num_cur)%(num_total/100)==0){
                 printf("%.1lf%% %d %lld %u\n",(100.0*num_cur/num_total),len,num_cur,uint32_t(cur_seed-SEED_STEP*len));
                 fflush(stdout);
             }
@@ -360,17 +375,21 @@ private:
     Scene scene;
     std::vector<std::vector<uint32_t>> true_constraints;
     std::vector<std::vector<uint32_t>> false_constraints;//newnew
+    bool progress;
 
 public:
     MultiQuickContinueSeedFinder(uint32_t start_s,uint64_t num_t,Scene sc,std::vector<std::vector<uint32_t>> true_cons
     ,std::vector<std::vector<uint32_t>> false_cons //newnew
+    ,bool show_progress = true
     )
     :start_seed(start_s),num_total(num_t),scene(sc),true_constraints(true_cons) 
     ,false_constraints(false_cons) //newnew
+    ,progress(show_progress)
     {pool.clear();}
     void single_thread_find_continue(uint64_t st,uint64_t num_assign){
         QuickContinueSeedFinder csf(this->start_seed,st,num_assign,this->scene,this->true_constraints
         ,this->false_constraints //newnew
+        ,this->progress
         );
         csf.find();
         mtx.lock();
@@ -416,15 +435,22 @@ protected:
     uint32_t cur_seed;
     uint64_t num_total;
     uint64_t num_cur;   //[0,numtotal)
+    uint64_t candidate_total;
+    bool progress;
 public:
     std::vector<SeedInfo> results;
     QuickKMPFinder(uint32_t start_seed,uint64_t start_offset,uint64_t num,
-        Scene sc,std::vector<uint32_t> mask){
+        Scene sc,std::vector<uint32_t> mask,bool show_progress = true,
+        uint64_t candidate_num = UINT64_MAX){
         scene = sc;
         masks.clear();masks = mask;
         cur_seed = uint32_t(start_seed+start_offset*SEED_STEP);
         num_total = num;
         num_cur = 0;
+        candidate_total = candidate_num == UINT64_MAX
+            ? (num >= masks.size() && !masks.empty() ? num-masks.size()+1 : 0)
+            : candidate_num;
+        progress = show_progress;
         results.clear();
         results.push_back(SeedInfo(0,{},0));
         // std::cout<<results.size()<<'\n';
@@ -432,55 +458,40 @@ public:
         new(&_zlt) ZombieTypeList(scene); 
         buildnext();
     }
-    bool check_match(uint32_t has,int j){
+    bool check_match(uint32_t has,size_t j){
         if(j>=masks.size())return false;
-        if(j<0) return true;
         return (has&0x7ffff)==masks[j];
     }
     void buildnext(){
-        size_t m=masks.size(),j=0;
-        int* ne = new int[m]; int t = ne[0]=-1;
-        while(j<m-1){
-            if(0>t || masks[t]==masks[j]){
-                if(masks[++t]!=masks[++j])
-                    ne[j]=t;
-                else ne[j]=ne[t];
-            }
-            else t = ne[t];
-        } 
-        next.clear();
-        for(int i=0;i<m;i++)
-            next.push_back(ne[i]);
-        // for(auto tmp:next) printf("%d ",tmp);
-        
+        next.assign(masks.size(),0);
+        for(size_t i=1,j=0;i<masks.size();++i){
+            while(j && masks[i]!=masks[j]) j=next[j-1];
+            if(masks[i]==masks[j]) ++j;
+            next[i]=int(j);
+        }
     }
     void find(){
-        while(num_cur<num_total){
-            size_t n = num_total;
-            size_t i=0;
-            long long m = masks.size();
-            int j=0;
-            while(j<m && i<n && num_cur<num_total){
-                if(j<0 || check_match(array[uint32_t(cur_seed*inv)], j)){
-                    i++,j++,cur_seed+=SEED_STEP,num_cur++;
-                    // std::cout<<i<<j<<'\n';
+        if(masks.empty() || candidate_total==0) return;
+        uint32_t idx=uint32_t(cur_seed*inv);
+        size_t j=0;
+        for(uint64_t i=0;i<num_total;++i){
+            uint32_t has=array[idx++];
+            while(j && !check_match(has,j)) j=next[j-1];
+            if(check_match(has,j)) ++j;
+            if(j==masks.size()){
+                uint64_t start=i+1-masks.size();
+                if(start<candidate_total){
+                    ++results[0].seed_count;
+                    results[0].seeds.push_back(uint32_t(cur_seed+start*SEED_STEP));
                 }
-                else {
-                    j=next[j];
-                }
-                if((num_cur)%(num_total/100)==0){
-                    printf("%.1lf%% %llu %u %llu\n",(100.0*num_cur/num_total),num_cur,cur_seed,results[0].seed_count);
-                    fflush(stdout);
-                }
+                j=next[j-1];
             }
-
-            if(j!=m) {
-                return;
+            num_cur=i+1;
+            if(progress && num_total>=100 && num_cur%(num_total/100)==0){
+                printf("%.1lf%% %llu %u %llu\n",(100.0*num_cur/num_total),num_cur,
+                    uint32_t(cur_seed+num_cur*SEED_STEP),results[0].seed_count);
+                fflush(stdout);
             }
-            
-            results[0].seed_count++;
-            results[0].seeds.push_back(uint32_t(cur_seed-m*SEED_STEP));
-
         }
     }
 };
@@ -488,42 +499,44 @@ class MultiQuickKMPFinder: public BasicSeedFinder{
 private:
     std::vector<std::thread> pool;
 
-    const uint32_t interval = 50;
     uint32_t start_seed;
     uint64_t num_total;
     Scene scene;
     std::vector<uint32_t> masks;
+    bool progress;
 
 public:
-    MultiQuickKMPFinder(uint32_t start_s,uint64_t num_t,Scene sc,    std::vector<uint32_t> mask)
-    :start_seed(start_s),num_total(num_t),scene(sc),masks(mask) {pool.clear();}
+    MultiQuickKMPFinder(uint32_t start_s,uint64_t num_t,Scene sc,
+        std::vector<uint32_t> mask,bool show_progress = true)
+    :start_seed(start_s),num_total(num_t),scene(sc),masks(std::move(mask)),
+        progress(show_progress) {pool.clear();}
 
-    void single_thread_find_kmp(uint64_t st,uint64_t num_assign){
-        QuickKMPFinder kmpf(this->start_seed,st,num_assign,this->scene,this->masks);
+    void single_thread_find_kmp(uint64_t st,uint64_t core,uint64_t scan){
+        QuickKMPFinder kmpf(this->start_seed,st,scan,this->scene,this->masks,
+            this->progress,core);
         kmpf.find();
         if(kmpf.results[0].seed_count==0)    return;
-        mtx.lock();
+        std::lock_guard<std::mutex> lock(mtx);
         if(final_results.empty())   final_results.push_back(kmpf.results[0]);
         else{
-            for(auto s:kmpf.results[0].seeds){
-                final_results[0].seeds.push_back(s);
-                final_results[0].seed_count++;
-
-                std::sort(final_results[0].seeds.begin(), final_results[0].seeds.end());
-                auto last = std::unique(final_results[0].seeds.begin(), final_results[0].seeds.end());
-                final_results[0].seeds.erase(last, final_results[0].seeds.end());
-            }
+            final_results[0].seeds.insert(final_results[0].seeds.end(),
+                kmpf.results[0].seeds.begin(),kmpf.results[0].seeds.end());
+            final_results[0].seed_count+=kmpf.results[0].seed_count;
         }
-        mtx.unlock();
     }
     void multi_thread_find_kmp(){
-        uint64_t block = 1 + num_total/MAX_THREAD, num_assign = block + interval;
-        for (int i=0;i<MAX_THREAD;i++){
-            uint64_t st = uint64_t(i*block);
-            std::thread t([this,st,num_assign]{
-                single_thread_find_kmp(st,num_assign);
+        if(num_total==0 || masks.empty()) return;
+        pool.clear();
+        uint64_t workers=std::min<uint64_t>(std::max(1u,MAX_THREAD),num_total);
+        uint64_t block=num_total/workers, remain=num_total%workers, st=0;
+        for(uint64_t i=0;i<workers;i++){
+            uint64_t core=block+(i<remain);
+            uint64_t scan=core+masks.size()-1;
+            std::thread t([this,st,core,scan]{
+                single_thread_find_kmp(st,core,scan);
             });
             pool.push_back(std::move(t));
+            st+=core;
         }
         for (auto &t: pool) t.join();
     }
@@ -534,7 +547,8 @@ class QuickSetFinder : public BasicSeedFinder {
 protected:
     const uint64_t MAX_COUNT = 10;
     const int LOWEST_STORE = 1;
-    const uint32_t DENSITY = 12000;
+    uint32_t density_threshold;
+    bool progress;
 
     ZombieTypeList _zlt;
     // 26=density
@@ -560,6 +574,7 @@ protected:
     uint32_t cur_seed;
     uint64_t num_total;
     uint64_t num_cur;
+    uint64_t candidate_total;
 
 public:
     std::vector<SeedInfo> results;
@@ -567,7 +582,11 @@ public:
     QuickSetFinder( uint32_t start_seed,uint64_t start_offset,uint64_t num,
         Scene sc,
         uint32_t mask,
-        std::vector<uint32_t> set)
+        std::vector<uint32_t> set,
+        uint32_t density = 12000,
+        bool show_progress = true,
+        uint64_t candidate_num = UINT64_MAX)
+        : density_threshold(density), progress(show_progress)
     {
         scene = sc;
         factor_constraints = set;
@@ -583,6 +602,7 @@ public:
         cur_seed = uint32_t(start_seed+start_offset*SEED_STEP);
         num_total = num;
         num_cur = 0;
+        candidate_total = candidate_num == UINT64_MAX ? num : candidate_num;
 
         _zlt.~ZombieTypeList(); 
         new(&_zlt) ZombieTypeList(scene); 
@@ -593,6 +613,10 @@ public:
 
         results.clear();
         // results.push_back(SeedInfo(0,{},0));
+    }
+    ~QuickSetFinder(){
+        delete[] idx_map;
+        delete[] judge_tree;
     }
     uint32_t get_idx_init(uint32_t has){
         uint32_t ans_idx = 0;
@@ -622,7 +646,7 @@ public:
             j<<=1;
         }
         if(factor_mask&j){
-            if(weight_has(has)<DENSITY){
+            if(weight_has(has)<density_threshold){
                 ans_idx |= k;
             }
         }
@@ -691,14 +715,15 @@ public:
             
             auto len = q_elem.size()-1;
             bool found=false;
-            if(len>=LOWEST_STORE){
+            if(len>=LOWEST_STORE && num_cur>=len && num_cur-len<candidate_total){
                 for (auto &info : results) 
                 if (info.metric == len) {
                     found = true;
                     ++info.seed_count;
+                    auto seed = uint32_t(cur_seed-SEED_STEP*len);
                     if (int(info.seed_count) <= MAX_COUNT)
-                        info.seeds.push_back(uint32_t(cur_seed-SEED_STEP*len));
-                    else if(len == set_size){
+                        info.seeds.push_back(seed);
+                    else if(progress && len == set_size){
                         printf("end\n");
                         return;
                     }
@@ -708,7 +733,7 @@ public:
                     results.push_back(SeedInfo(len, {uint32_t(cur_seed-SEED_STEP*len)}, 1));
             }
 
-            if((num_cur)%(num_total/100)==0)    {
+            if(progress && num_total>=100 && (num_cur)%(num_total/100)==0)    {
                 printf("%.1lf%% %d %lld %u\n",(100.0*num_cur/num_total),judge_tree[0].num_type_subtree,num_cur,uint32_t(cur_seed-SEED_STEP*len));
                 fflush(stdout);
             }
@@ -723,64 +748,71 @@ class MultiQuickSetFinder: public BasicSeedFinder{
 private:
     std::vector<std::thread> pool;
 
-    const uint32_t interval = 50;
     uint32_t start_seed;
     uint64_t num_total;
 
     Scene scene;
     uint32_t factor_mask;
     std::vector<uint32_t> factor_constraints;
+    uint32_t density_threshold;
+    bool progress;
 public:
     MultiQuickSetFinder(uint32_t start_s,uint64_t num_t,Scene sc,
         uint32_t mask,
-        std::vector<uint32_t> set)
+        std::vector<uint32_t> set,
+        uint32_t density = 12000,
+        bool show_progress = true)
     :   start_seed(start_s),num_total(num_t),scene(sc),
-        factor_mask(mask),factor_constraints(set) {pool.clear();}
-    void single_thread_find_score(uint64_t st,uint64_t num_assign){
-        QuickSetFinder ssf(this->start_seed,st,num_assign,this->scene,
-            this->factor_mask,this->factor_constraints);
+        factor_mask(mask),factor_constraints(set),
+        density_threshold(density),progress(show_progress) {pool.clear();}
+    void single_thread_find_score(uint64_t st,uint64_t core,uint64_t scan){
+        QuickSetFinder ssf(this->start_seed,st,scan,this->scene,
+            this->factor_mask,this->factor_constraints,
+            this->density_threshold,this->progress,core);
 
         ssf.find();
-        mtx.lock();
-        /* 
-        if(final_results.empty())   final_results.push_back(ssf.results[0]);
-        else{
+        auto in_core=[&](uint32_t seed){
+            uint64_t offset=uint32_t(uint64_t(seed-start_seed)*inv);
+            return offset>=st && offset<st+core;
+        };
+        for(auto &info:ssf.results)
+            info.seeds.erase(std::remove_if(info.seeds.begin(),info.seeds.end(),
+                [&](uint32_t seed){return !in_core(seed);}),info.seeds.end());
 
-            for(auto s:ssf.results[0].seeds){
-                final_results[0].seeds.push_back(s);
-                final_results[0].seed_count++;
-
-                std::sort(final_results[0].seeds.begin(), final_results[0].seeds.end());
-                auto last = std::unique(final_results[0].seeds.begin(), final_results[0].seeds.end());
-                final_results[0].seeds.erase(last, final_results[0].seeds.end());
-            }
-        }
-        */
+        std::lock_guard<std::mutex> lock(mtx);
         for (auto now_info : ssf.results) {
+            if(now_info.seeds.empty()) continue;
             bool found = false;
             for(auto &info:final_results)
             if (info.metric == now_info.metric) {
                 found = true;
                 for(auto s:now_info.seeds)
                     info.seeds.push_back(s);
-                std::sort(info.seeds.begin(), info.seeds.end());
+                std::sort(info.seeds.begin(),info.seeds.end(),[&](uint32_t a,uint32_t b){
+                    return uint32_t(uint64_t(a-start_seed)*inv)<uint32_t(uint64_t(b-start_seed)*inv);
+                });
                 auto last = std::unique(info.seeds.begin(), info.seeds.end());
                 info.seeds.erase(last, info.seeds.end());
+                info.seed_count += now_info.seed_count;
                 break;
             }
             if (!found)     final_results.push_back(now_info);
         }
-        mtx.unlock();
 
     }
     void multi_thread_find_score(){
-        uint64_t block = 1 + num_total/MAX_THREAD, num_assign = block + interval;
-        for (int i=0;i<MAX_THREAD;i++){
-            uint64_t st = uint64_t(i*block);
-            std::thread t([this,st,num_assign]{
-                single_thread_find_score(st,num_assign);
+        if(num_total==0 || factor_constraints.empty()) return;
+        pool.clear();
+        uint64_t workers=std::min<uint64_t>(std::max(1u,MAX_THREAD),num_total);
+        uint64_t block=num_total/workers, remain=num_total%workers, st=0;
+        for(uint64_t i=0;i<workers;i++){
+            uint64_t core=block+(i<remain);
+            uint64_t scan=core+factor_constraints.size()+1;
+            std::thread t([this,st,core,scan]{
+                single_thread_find_score(st,core,scan);
             });
             pool.push_back(std::move(t));
+            st+=core;
         }
         for (auto &t: pool) t.join();
     }

@@ -28,6 +28,7 @@ public:
     double sun_start = 9990;
     double sun_end = -500;
     bool sun_cap = true;
+    double bias = 0;
 
     uint32_t mode = 1;
 
@@ -63,13 +64,17 @@ public:
         sun_start = j["sun_start"];
         sun_end = j["sun_end"];
         sun_cap = j["sun_cap"];
+        bias = j.value("bias", 0.0);
 
         mode = j["mode"];
 
         mode1_sim_num = j["mode1_sim_num"];
         mode1_output_num = j["mode1_output_num"];
 
-        mode2_seed = j["mode2_seed"];
+        auto seed = j["mode2_seed"];
+        mode2_seed = seed.is_string()
+            ? uint32_t(std::stoul(seed.get<std::string>(), nullptr, 0))
+            : seed.get<uint32_t>();
 
         // 0-18 zombie, 19 space, 20 density
         factor1 = j["factor1"].get<std::vector<int>>();
@@ -88,10 +93,11 @@ public:
         std::cout << "sun_start: " << sun_start << std::endl;
         std::cout << "sun_end: " << sun_end << std::endl;
         std::cout << "sun_cap: " << sun_cap << std::endl;
+        std::cout << "bias: " << bias << std::endl;
         std::cout << "mode: " << mode << std::endl;
         std::cout << "mode1_sim_num: " << mode1_sim_num << std::endl;
         std::cout << "mode1_output_num: " << mode1_output_num << std::endl;
-        std::cout << "mode2_seed: " << mode2_seed << std::endl;
+        printf("mode2_seed: 0x%08X\n", mode2_seed);
 
         std::cout << "factor1 * factor2 = coef: " << std::endl;
         for (int i = 0; i < factor1.size(); ++i) {
@@ -150,7 +156,7 @@ public:
             int v2 = bsf.check_has(has, (1 << f2))? 1:config.neg_value;
             ans += v1 * v2 * c;
         }
-        return ans;
+        return ans + config.bias;
     }
 
     double simu(uint32_t rng_seed) {
@@ -285,7 +291,7 @@ void work(SunConfig& config) {
         printf("Top %d results:\n", config.mode1_output_num);
         for (int i = 0; i < config.mode1_output_num && i < results.size(); ++i) {
             auto real_seed = bsf.get_real_seed(results[i].rng_seed, config.user_id, config.mode_id, config.level_start);
-            printf("%08X, %.0f\n", real_seed, results[i].lowest_sun);
+            printf("0x%08X, %.0f\n", real_seed, results[i].lowest_sun);
         }  
     }
     else if (config.mode == 2) {
